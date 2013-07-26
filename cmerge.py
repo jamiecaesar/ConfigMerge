@@ -1,5 +1,6 @@
 import argparse
 import os
+import re
 
 #=============FUNCTION DEFINITIONS===============#
 def hline():
@@ -22,18 +23,26 @@ def parse_vars(file):
     host_count = 0
     hostfound = 0
     for line in file:
-        if "<--END-->" in line:
+        if line.startswith("#"):
+                pass
+        elif "<--END-->" in line:
             #This marker should be at the end of each host's block of variables, so I know which variables
             #belong to which host in the data structure
             hostfound = 0
         elif "::" not in line:
             #This string "::" is used to separate the key and value in the variable file.  If any line doesn't
             #have this (with exception of the END line, shown above), ignore it and print an error.
-            print "Seperator not found in '%r'. Line ignored" % line
-        elif "^HOSTNAME^" in line:
+            print "Did NOT find Seperator '%r'. Line ignored" % line
+        elif "<HOSTNAME>" in line and hostfound == 1:
+            hline()
+            print "ERROR: <HOSTNAME> found inside another host's variable block."
+            print "ERROR LINE: '%r'" % line
+            print "Exiting program. Please correct line and try again."
+            exit(0)
+        elif "<HOSTNAME>" in line and hostfound == 0:
             #The Hostname key should always be the first in a block of variables for a device's config file.
             #This name is then used to set the primary key for the device, as well as create the sub-dict
-            #which contains the key to match in the template (^HOSTNAME^) and the value to replace it with.
+            #which contains the key to match in the template (<HOSTNAME>) and the value to replace it with.
             label, hostname = line.split('::')
             hostname = hostname.rstrip()
             hostfound = 1
@@ -77,7 +86,7 @@ def write_configs(info_import, template, verbose):
         for line in template:
             # For each line of the template, do a search for each find/replace "key".  If it is found
             # replace it with the actual value.  Each line is process for every find/replace key in case
-            # the line has more than one.  i.e.  ip address ^INSIDE_IP^ ^INSIDE_MASK^
+            # the line has more than one.  i.e.  ip address <INSIDE_IP> <INSIDE_MASK>
             for key, value in hostinfo.iteritems():
                 if key in line:
                     line = line.replace(key,value)
@@ -122,8 +131,42 @@ def varprint(info):
         hline()
 
 
+def unique_vars(file):
+    """This function searches the file for all unique find/replace variables"""
+    all_vars = []
+    u_var_count = 0
+
+    file.seek(0)
+    reg=re.compile(r"<\S*?>")
+    for line in file:
+        linematch = reg.findall(line)
+        for item in linematch:
+            if item == "<--END-->":
+                pass
+            else:
+                all_vars.append(item)
+    else:
+        unique_vars = list(set(all_vars))
+    return unique_vars
+
+
+def var_check(fn_1, fn_2, vars_1, vars_2):
+    """This function will take the list of unique variables found in two files and report if they match.
+        If they do not match, then this function will output the difference"""
+    if len(set(vars_1) & set(vars_2)) == len(set(vars_1)) and len(set(vars_1) & set(vars_2)) == len(set(vars_2)):
+        print "All variables match between %s and %s\n" % (fn_1, fn_2)
+        return True 
+    else:
+        print "WARNING:"
+        if len(set(vars_1) - set(vars_2)) != 0:
+            print "Variables that only exist in %s are: %s\n" % (fn_1, list(set(vars_1) - set(vars_2)))
+        if len(set(vars_2) - set(vars_1)) != 0:
+            print "Variables that only exist in %s are: %s\n" % (fn_2, list(set(vars_2) - set(vars_1)))
+        return False
+        
+
 def review_vars(data, template, verbose):
-    """This is simply a decision tree on whether the user wants to review the variables before
+    """This is a decision tree on whether the user wants to review the variables before
         allowing the program to export all the config files.  It will loop indefinitely until
         a valid respose is received."""
     if verbose:
@@ -170,11 +213,34 @@ parser.add_argument("variables", help="Name of the file that contains find/repla
 #Assign input arguments to the "args" variable for reference later in the script.
 args = parser.parse_args()
 
+hline()
+print""
+
 #Opens the required files for the script to run (template and variables)
 var_file = open(args.variables, 'r')
 template = open(args.template, 'r')
 #Call function to parse variable files and assign outputs to variables
 host_list, host_count, importdata = parse_vars(var_file)
+
+var_file_u = unique_vars(var_file)
+template_u = unique_vars(template)
+correct = var_check(args.variables, args.template, var_file_u, template_u)
+
+#If there were errors in the comparison, allow the user to decide if they want to continue or not.
+if not correct:
+    while True:
+        answ = raw_input("Would you like to continue with the merge anyway? ")
+        if answ.lower() == "yes" or answ.lower() == "y":
+            break
+        elif answ.lower() == "no" or answ.lower() == "n":
+            print "Please modify your input files and try again.  Thanks!"
+            var_file.close()
+            template.close()
+            exit(0)
+        else:
+            print "I did not understand that response."
+    
+
 #Close variables file -- no longer needed
 var_file.close()
 
