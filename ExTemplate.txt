@@ -1,0 +1,157 @@
+no service pad
+service tcp-keepalives-in
+service tcp-keepalives-out
+service timestamps debug datetime msec localtime show-timezone
+service timestamps log datetime msec localtime show-timezone
+service password-encryption
+service sequence-numbers
+!
+hostname <HOSTNAME>
+!
+logging buffered 8192 debugging
+!
+no aaa new-model
+!
+ip domain name test.net
+crypto key generate rsa
+1024
+
+no ip access-list extended OUTBOUND_NAT
+ip access-list extended OUTBOUND_NAT
+ deny   ip <INSIDE_NET> 0.0.0.255 host 10.2.3.4
+ permit ip <INSIDE_NET> 0.0.0.255 any
+no ip access-list extended ACL-IN
+ip access-list extended ACL-IN
+ permit udp any host <OUTSIDE_IP> eq 500
+ permit esp any host <OUTSIDE_IP>
+ permit ahp any host <OUTSIDE_IP>
+ permit tcp any host <OUTSIDE_IP> eq 22
+ permit tcp any host <OUTSIDE_IP> eq telnet
+ permit icmp any host <OUTSIDE_IP>
+ permit tcp host 10.2.3.4 <INSIDE_NET> 0.0.0.255 eq 22
+ permit tcp host 10.2.3.4 <INSIDE_NET> 0.0.0.255 eq telnet
+ permit udp host 10.2.3.4 <INSIDE_NET> 0.0.0.255 eq snmp
+ permit icmp host 10.2.3.4 <INSIDE_NET> 0.0.0.255
+ deny ip any any
+no ip access-list extended TEST-VPN
+ip access-list extended TEST-VPN
+ permit ip <INSIDE_NET> 0.0.0.255 host 10.2.3.4
+!
+crypto isakmp policy 1
+ encr aes
+ hash sha
+ authentication pre-share
+ group 2
+ lifetime 28800
+crypto isakmp key teskey address 99.99.99.123
+!
+!
+crypto ipsec transform-set TEST-SET esp-aes esp-sha-hmac 
+ mode tunnel
+!
+!
+!
+crypto map TESTIPSEC 10 ipsec-isakmp 
+ description VPN for Testing
+ set peer 99.99.99.123
+ set transform-set TEST-SET 
+ match address TEST-VPN
+!
+username test-admin privilege 15 secret test-admin
+!
+clock timezone eastern -5
+ip cef
+!
+!
+ip tcp synwait-time 10
+ip dhcp excluded-address <INSIDE_IP> <INSIDE_PFX>.19
+ip dhcp excluded-address <INSIDE_PFX>.121 <INSIDE_PFX>.254
+!
+ip dhcp pool test_scope
+   network <INSIDE_NET> <INSIDE_MASK>
+   dns-server 8.8.8.8 4.2.2.2
+   netbios-name-server 8.8.8.8 4.2.2.2 
+   netbios-node-type h-node
+   default-router <INSIDE_IP> 
+   lease 0 8
+!
+!
+no ip bootp server
+ip name-server 8.8.8.8
+ip name-server 4.2.2.2
+ip ssh time-out 60
+ip ssh authentication-retries 2
+ip inspect name DEFAULT100 ftp
+ip inspect name DEFAULT100 smtp
+ip inspect name DEFAULT100 tftp
+ip inspect name DEFAULT100 tcp
+ip inspect name DEFAULT100 udp
+!
+!
+!
+!
+interface FastEthernet4
+ description <OUTSIDE_DESC>
+ ip address <OUTSIDE_IP> <OUTSIDE_MASK>
+ ip access-group ACL-IN in
+ no ip redirects
+ no ip unreachables
+ no ip proxy-arp
+ ip nat outside
+ ip inspect DEFAULT100 out
+ ip virtual-reassembly
+ no cdp enable
+ crypto map TESTIPSEC
+ no shut
+!
+interface Vlan1
+ description *** <LOCATION> ***
+ ip address <INSIDE_IP> <INSIDE_MASK>
+ no ip redirects
+ no ip unreachables
+ no ip proxy-arp
+ ip nat inside
+ ip virtual-reassembly
+ no cdp enable
+ no shut
+!
+!
+ip classless
+ip route 0.0.0.0 0.0.0.0 <DEF_ROUTE>
+!
+no ip http server
+no ip http secure-server
+ip nat inside source list OUTBOUND_NAT interface FastEthernet4 overload
+!
+logging trap debugging
+snmp-server community example RO
+snmp-server trap-source Vlan1
+snmp-server location <LOCATION>
+snmp-server enable traps tty
+snmp-server enable traps isakmp tunnel start
+snmp-server enable traps isakmp tunnel stop
+no cdp run
+!
+!
+!
+!
+!
+!
+banner login ^
+***********************************************************************
+* Unauthorized access to this machine is prohibited.  GO AWAY!        *
+***********************************************************************
+^
+!
+line con 0
+ privilege level 15
+ login local
+ stopbits 1
+line vty 0 4
+ exec-timeout 5 0
+ privilege level 15
+ login local
+ transport input telnet ssh
+ transport output none
+!
+end
