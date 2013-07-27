@@ -1,7 +1,7 @@
 ConfigMerge
 ===========
 
-Python script for creating IOS/NX-OS configurations.  It will take a template configuration file and a variables file.  The script will read in the variables for each device from the variables file, and then create a configuration from each device based on the template file.
+ConfigMerge is a Python script for creating multiple IOS/NX-OS configurations based on a template.  It will take a template configuration file and a variables file.  The script will read in the variables for each device from the variables file, and then create a configuration from each device based on the template file.
 
 Additional Features (beyond basic find/replace)
 * Provides a list of all hosts found in the variables for review file prior to export.
@@ -13,5 +13,6 @@ Additional Features (beyond basic find/replace)
 
 Additional functionality planned:
 
-1) Figure out if there is a way to make the variable review show in the same order as the brief list of hosts found in the variables file.
-2) Look at a more user friendly way to alert that the files referenced as arguments to the script do not exist.
+1) Make the variable review function show in the same order as the brief list of hosts found in the variables file.
+
+2) Find a more user friendly way to alert that the files referenced as arguments for the script do not exist.
