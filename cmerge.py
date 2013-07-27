@@ -54,6 +54,10 @@ def parse_vars(file):
             #Split the variable (<HOSTNAME>) from the value
             label, hostname = line.split('::')
             hostname = hostname.rstrip()
+            for imported_host in host_list:
+                if hostname == imported_host:
+                    print "ERROR: DUPLICATE HOSTNAME IN VARIABLES FILE. EXITING..."
+                    exit(0)
             hostblock = 1
             #Create an entry in the dictionary for the host.  The value will be another dictionary.
             host_list.append(hostname)
