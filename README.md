@@ -19,8 +19,8 @@ The script will parse a list of replacement variables for each host from the var
 * --quiet (-q) flag that skips all the review and questions and just exports the files (if you are feeling confident).  Will still alert on orphaned variables.
 
 ##Using the script
-* Once you have the "golden" configuration.  Replace any part of the configuration file that needs to be changed per-device to a variable name (i.e. <IP_ADDR>)
-* Once you have your template configuration file, create the variables file (or modify the example included here), so that each device has its own section detailing the variable replacements for that device.  The "block" should start with the <HOSTNAME> variable and end with the <--END--> marker.
+* Once you have the "golden" configuration.  Replace any part of the configuration file that needs to be changed per-device to a variable name (i.e. &lt;IP_ADDR&gt;)
+* Once you have your template configuration file, create the variables file (or modify the example included here), so that each device has its own section detailing the variable replacements for that device.  The "block" should start with the &lt;HOSTNAME&gt; variable and end with the &lt;--END--&gt; marker.
 * Run the script:
 
 ```
