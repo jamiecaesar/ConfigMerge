@@ -13,6 +13,4 @@ Additional Features (beyond basic find/replace)
 
 Additional functionality planned:
 
-1) Make the variable review function show in the same order as the brief list of hosts found in the variables file.
-
-2) Find a more user friendly way to alert that the files referenced as arguments for the script do not exist.
+1) Find a more user friendly way to alert that the files referenced as arguments for the script do not exist.
