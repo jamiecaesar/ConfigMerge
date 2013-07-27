@@ -14,7 +14,6 @@ The script will parse a list of replacement variables for each host from the var
 * Allows for a review of all variables loaded for each host, prior to export.
 * Will compare all variables found in the template file and the variables file and point out any that only exist in one file or the other (orphaned).
 * Once the previous check is complete, it will then check each host's list of variables to make sure it contains replacements for all vars in the template.
-
 * --help (-h) option that explains the syntax of the command as well as available flags.
 * --verbose (-v) flag that will force a variables review and give additional information during the write process.
 * --quiet (-q) flag that skips all the review and questions and just exports the files (if you are feeling confident).  Will still alert on orphaned variables.
