@@ -49,17 +49,21 @@ args = parser.parse_args()
 
 template = open(args.template)
 
+#Find all vars in the template
 t_vars = find_unique_vars(template)
 
 if args.verbose:
     print "Found the following variables: " + str(t_vars)[1:(len(str(t_vars))-2)]
-    
+
+#If there isn't a hostname field in the template, throw an error.  Otherwise remove it from the list
+#of vars, because it will be statically entered later, per device.    
 if "<HOSTNAME>" in t_vars:
     t_vars.remove("<HOSTNAME>")
 else:
     print "The template MUST contain a '<HOSTNAME>' variable.  Please add one after the 'hostname' or 'switchname' command in the template and try again"
     exit(0)
 
+#Ask how many hosts they user wants, so we can generate a block for each
 while True:
     numhosts = eval(raw_input("How many device blocks do you want added to the output file? "))
     if type(numhosts) == int:
@@ -69,10 +73,12 @@ while True:
 
 #If filename ends with .txt, remove it, so the final file won't have .txt in the middle
 if args.template[-4:] == ".txt":
-    newfile = open(args.template[:-4] + "-vars.txt", 'w')
+    newfilename = args.template[:-4] + "-vars.txt"
 else:
-    newfile = open(args.template + "-vars.txt", 'w')
+    newfilename = args.template + "-vars.txt"
     
+newfile = open(newfilename, 'w')
+
 #Write File Header
 if args.verbose:
     print "Writing File Header"
@@ -89,15 +95,15 @@ newfile.write("#     The grouping ends with the <--END--> tag.\n")
 newfile.write("#     Add information for as many hosts as you'd like.\n")
 newfile.write("###############################################################################\n")
 
+#Print a variable block for each host the user requested.
 count = 1
-while numhosts > 0:
+while count <= numhosts:
     write_host_block("Host" + str(count) + "-Router")
     count = count + 1
-    numhosts = numhosts - 1
 
 newfile.close()
 
-print str(count - 1) + " variable blocks written to file: " + args.template + "-vars.txt"
+print str(count - 1) + " variable blocks written to file: " + newfilename
 
     
 
