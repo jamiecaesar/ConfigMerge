@@ -1,7 +1,6 @@
 import argparse
 import os
 import re
-import os
 os.system('cls' if os.name=='nt' else 'clear')
 
 #=============FUNCTION DEFINITIONS===============#
@@ -137,7 +136,7 @@ def write_configs(vars, template):
         dstfile.close()
         
                 
-def print_vars_per_host(vars):
+def print_vars_per_host(varlist):
     """This should be passed the data structure with all the hostname find/replace variables in it.
         This function will crawl the data structure to list all find/replace variables and values
         grouped by the host they are meant for."""
@@ -147,9 +146,10 @@ def print_vars_per_host(vars):
     for host in host_list:  #References global host_list
         print "Variables for device %s:" % host
         hline()
-        #Loop through the secondary dictionary, which is all variables for that host
-        for skey, value in vars[host].items():
-            print "KEY: %s , VALUE: %s" % (skey, value)
+        #Loop through the secondary dictionary, in alpha order, and list key/value pairs
+        keylist = sorted(varlist[host])
+        for key in keylist:
+            print "KEY: %s , VALUE: %s" % (key, varlist[host][key])
         else:
             hline()
             #Pause after each host's output.  Allow a method to quit should the user see some 
@@ -217,8 +217,9 @@ def var_list_compare(filename1, filename2, vars_1, vars_2):
         
 
 def per_host_var_check(template_list, vardata):
-    """This function will check the variables found in the template against each host's imported list of variables
-        If a host is missing variables, the user will be alerted about which host has missing variables."""
+    """This function will check the variables found in the template against each host's imported list of
+         variables.  If a host is missing variables, the user will be alerted about which host has missing
+         variables."""
         
     error = 0
     if args.verbose:
