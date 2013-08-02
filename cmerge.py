@@ -299,7 +299,6 @@ parser.add_argument("variables", help="Name of the file that contains find/repla
 #Assign input arguments to the "args" variable for reference later in the script.
 args = parser.parse_args()
 
-#print "\n" * 10
 print "Start of ConfigMerge output:"
 hline()
 
