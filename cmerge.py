@@ -1,3 +1,4 @@
+#!/usr/bin/python
 import argparse
 import os
 import re
@@ -156,7 +157,7 @@ def print_vars_per_host(varlist):
             #incorrect data
             pause = raw_input("Press ENTER to Continue (q to QUIT)")
             if pause.lower() == "q":
-                print "EXITING DUE TO USER REQUEST"
+                print "\nExiting due to user request\n"
                 exit(0)
             hline()
     else:
@@ -275,22 +276,138 @@ def q_review_vars():
 def q_start_export():
     """This is a decision tree on whether the user wants to export the configuration files."""
     while True:
-        answ3 = raw_input("Would you like to export the config files? ")
+        answ3 = raw_input("\nWARNING: Exporting configurations will overwrite any files with the same name in the 'configs' directory.\nWould you like to export the config files now? ")
         if answ3.lower() == "yes" or answ3.lower() == "y":
             write_configs(importdata, template)
             template.close()
             break
         elif answ3.lower() == "no" or answ3.lower() == "n":
-            print "Configuration files have NOT been exported.  Exiting..."
+            print "Configuration files have NOT been exported.  Exiting...\n"
             exit(0)
         else:
             print "I did not understand that answer"
+
+
+def write_host_block(file, hostname, t_vars):
+    if args.verbose:
+        print "Writing line for <HOSTNAME>"
+    file.write("<HOSTNAME>::" + hostname + "\n")
+    for var in sorted(t_vars):
+        if args.verbose:
+            print "Writing Line For " + var
+        file.write(var + "::\n")
+    file.write("<--END-->\n")
+
+
+def create_var_file():
+    t_vars = find_unique_vars(template)
+    
+    if args.verbose:
+        print "Found the following variables: " + str(t_vars)[1:(len(str(t_vars))-2)]
+
+    #If there isn't a hostname field in the template, throw an error.  Otherwise remove it from the list
+    #of vars, because it will be statically entered later, per device.    
+    if "<HOSTNAME>" in t_vars:
+        t_vars.remove("<HOSTNAME>")
+    else:
+        print "The template MUST contain a '<HOSTNAME>' variable.  Please add one after the 'hostname' or 'switchname' command in the template and try again"
+        exit(0)
+
+    #Ask how many hosts they user wants, so we can generate a block for each
+    while True:
+        numhosts = eval(raw_input("How many device blocks do you want added to the output file? "))
+        if type(numhosts) == int:
+            break
+        else:
+            print "Value must be a whole number.  Please try again."
+    
+    newfile = open(args.variables, 'w')
+
+    #Write File Header
+    if args.verbose:
+        print "Writing File Header"
+    newfile.write("###############################################################################\n")
+    newfile.write("#     Lines starting with # will be ignored\n")
+    newfile.write("#\n")
+    newfile.write("#     All Find/Replace items for the same device should be grouped together.\n")
+    newfile.write("#     The variable should be contained in angle brackets  ->  < >\n")
+    newfile.write("#     These variable names will be replaced if found in the template config file\n")
+    newfile.write("#	  Variable names MUST NOT have spaces in them\n")
+    newfile.write("#     The variable should be separated by its value with a double colon. -> ::\n")
+    newfile.write("#     The grouping MUST start with the <HOSTNAME> variable\n")
+    newfile.write("#     The grouping ends with the <--END--> tag.\n")
+    newfile.write("#     Add information for as many hosts as you'd like.\n")
+    newfile.write("###############################################################################\n")
+
+    #Print a variable block for each host the user requested.
+    count = 1
+    while count <= numhosts:
+        write_host_block(newfile, "Host" + str(count) + "-Router", t_vars)
+        count = count + 1
+
+    newfile.close()
+
+    print str(count - 1) + " variable blocks written to file: " + args.variables
+    
+
+def config_merge():
+    #Gather unique variables from each file, so they can be compared.
+    var_file_u = find_unique_vars(var_file)
+    template_u = find_unique_vars(template)
+    identical = var_list_compare(args.variables, args.template, var_file_u, template_u)
+
+    #If there were errors in the comparison, allow the user to decide if they want to continue or not.
+    if not identical:
+        while True:
+            answ = raw_input("Would you like to continue with the merge anyway? ")
+            if answ.lower() == "yes" or answ.lower() == "y":
+                break
+            elif answ.lower() == "no" or answ.lower() == "n":
+                print "Please modify your input files and try again.  Thanks!"
+                var_file.close()
+                template.close()
+                exit(0)
+            else:
+                print "I did not understand that response."
+    
+
+    #Close variables file -- no longer needed
+    var_file.close()
+
+    #Now make sure each host has all variables found in the template configuration
+    per_host_var_check(template_u, importdata)
+
+    if args.quiet:
+        #If quiet flag was set, skip the review and get straight to the config writing
+        write_configs(importdata, template)
+    else:
+        #Otherwise, give brief review of the hosts found
+        print "Found settings for %d config files.  They are: " % len(host_list)
+        x = 1
+        for host in host_list:
+            print "%d. %s" % (x, host)
+            x = x + 1
+        print ""
+        #First Decision tree.  Allows user to decide if brief review looks accurate.
+        #Other decision tree functions are called depending on the response.
+        while True:
+            answ = raw_input("Is this correct? (Type 'yes' to continue) ")
+            if answ.lower() == "yes" or answ.lower() == "y":
+                q_review_vars()
+                break
+            elif answ.lower() == "no" or answ.lower() == "n":
+                print "Please modify your vars file and try again.  Thanks!"
+                template.close()
+                exit(0)
+            else:
+                print "I did not understand that response."
     
     
 #=================BEGIN MAIN PROGRAM=====================#
 
 #This section manages the (-h) help output, with the help of ArgParse, and makes sure that all required arguments are passed to the script when run.
 parser = argparse.ArgumentParser(description="This script will generate a configuration file for multiple devices.  It needs a 'template' configuration file that uses variable names in every location where each device needs a different value.  This script also needs a 'variables' file that lists the variables and associated replacement value for the device.  This variables file can contain sections for multiple configuration files.")
+parser.add_argument("-c", "--create_vars", action="store_true", help="Create a variables file containing all vars found in the template.  The data will be written to the file specified in the 'variables' argument")
 group = parser.add_mutually_exclusive_group()
 group.add_argument("-v", "--verbose", action="store_true", help="Will provide a more verbose output and automatically trigger a review of all parsed variables")
 group.add_argument("-q", "--quiet", action="store_true", help="Will provide minimal output and will automatically skip all review questions")
@@ -299,63 +416,27 @@ parser.add_argument("variables", help="Name of the file that contains find/repla
 #Assign input arguments to the "args" variable for reference later in the script.
 args = parser.parse_args()
 
+try:
+    template = open(args.template, 'r')
+except IOError:
+    print "The template file %s cannot be found, please try again with a valid filename\n" % args.variables
+    exit(1)
+
 print "Start of ConfigMerge output:"
 hline()
 
-var_file = open(args.variables, 'r')
-template = open(args.template, 'r')
-
-#Call function to parse variable files and assign outputs to variables
-host_list, importdata = parse_vars_file(var_file)
-
-#Gather unique variables from each file, so they can be compared.
-var_file_u = find_unique_vars(var_file)
-template_u = find_unique_vars(template)
-identical = var_list_compare(args.variables, args.template, var_file_u, template_u)
-
-#If there were errors in the comparison, allow the user to decide if they want to continue or not.
-if not identical:
-    while True:
-        answ = raw_input("Would you like to continue with the merge anyway? ")
-        if answ.lower() == "yes" or answ.lower() == "y":
-            break
-        elif answ.lower() == "no" or answ.lower() == "n":
-            print "Please modify your input files and try again.  Thanks!"
-            var_file.close()
-            template.close()
-            exit(0)
-        else:
-            print "I did not understand that response."
-    
-
-#Close variables file -- no longer needed
-var_file.close()
-
-#Now make sure each host has all variables found in the template configuration
-per_host_var_check(template_u, importdata)
-
-if args.quiet:
-    #If quiet flag was set, skip the review and get straight to the config writing
-    write_configs(importdata, template)
+if args.create_vars and os.path.isfile(args.variables):    
+    print "\nThe file %s already exists.\n\nIf you are trying to generate config files, please remove the '-c' argument.\nIf you are trying to create a variables file, please supply an unused filename\n" % args.variables
+elif args.create_vars and not os.path.isfile(args.variables):
+    create_var_file()
 else:
-    #Otherwise, give brief review of the hosts found
-    print "Found settings for %d config files.  They are: " % len(host_list)
-    x = 1
-    for host in host_list:
-        print "%d. %s" % (x, host)
-        x = x + 1
-    print ""
-    #First Decision tree.  Allows user to decide if brief review looks accurate.
-    #Other decision tree functions are called depending on the response.
-    while True:
-        answ = raw_input("Is this correct? (Type 'yes' to continue) ")
-        if answ.lower() == "yes" or answ.lower() == "y":
-            q_review_vars()
-            break
-        elif answ.lower() == "no" or answ.lower() == "n":
-            print "Please modify your vars file and try again.  Thanks!"
-            template.close()
-            exit(0)
-        else:
-            print "I did not understand that response."
+    try:
+        var_file = open(args.variables, 'r')
+        #Parse variables file into global data structures.  These are referenced by many of the functions.
+        host_list, importdata = parse_vars_file(var_file)
+        config_merge()        
+    except IOError:
+        print "The template file %s cannot be found, please try again with a valid filename\n" % args.variables
+        exit(1)
+
 

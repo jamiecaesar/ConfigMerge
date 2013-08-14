@@ -19,11 +19,11 @@ The script will parse a list of replacement variables for each host from the var
 * --quiet (-q) flag that skips all the review and questions and just exports the files (if you are feeling confident).  Will still alert on orphaned variables.
 
 ##Using the script
-* Once you have the "golden" configuration.  Replace any part of the configuration file that needs to be changed per-device to a variable name (i.e. &lt;IP_ADDR&gt;)
-* Once you have your template configuration file, use the makevarsfile.py script to create the variables file with as many hosts as you'd like, each with all the variables found in the template.
+* Once you have the "golden" configuration tempalte.  Replace any part of the configuration file that needs to be changed per-device to a variable name (i.e. &lt;IP_ADDR&gt;)
+* Once you have your template configuration file, use the cmerge.py script to create the variables file with as many hosts as you'd like, each with all the variables found in the template.
 
 ```
-python makevarsfile.py <template_filename>
+python cmerge.py -c <template_filename> <output_filename>
 ```
 
 * Modify the output variables file with the values that each hosts should have in its own configuration.
@@ -36,7 +36,4 @@ python cmerge.py <template_filename> <variable_filename>
 
 * Gather your configuration files from the configs/ directory, which was created by the script.
 
-##Planned Improvements:
-
-* Find a more user friendly way to alert that the files referenced as arguments for the script do not exist.
 
