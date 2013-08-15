@@ -23,6 +23,7 @@ def parse_vars_file(file):
     file.seek(0)
     host_list = []
     dict_vars = {}
+    errors = ""
     #This variable tracks whether the line being parsed is part of a host "block" of variables or not.
     hostblock = 0
 
@@ -39,7 +40,7 @@ def parse_vars_file(file):
         #This string "::" is used to separate the key and value in the variable file.  If any line doesn't
         #have this (with exception of the END line, shown above), ignore it and print an error.
         elif "::" not in line:
-            print "Did NOT find Seperator '%r'. Line ignored" % line
+            print "Did NOT find seperator (::) in %r. Line ignored" % line
 
         #If we find a HOSTNAME variable, but the function thinks we are still in a host's block of variables, 
         #then throw an error and exit.
@@ -83,7 +84,7 @@ def parse_vars_file(file):
             #could be HOSTNAME line that had an error, so all lines for that host will match this)
             print "INVALID LINE in %s: '%r'" % (hostname, line)
             
-    #Return the list of hosts, the host count, and the data structure to the main program.
+    #Return the list of hosts and the data structure to the main program.
     return host_list, dict_vars
     
     
@@ -382,7 +383,17 @@ def config_merge():
         write_configs(importdata, template)
     else:
         #Otherwise, give brief review of the hosts found
-        print "Found settings for %d config files.  They are: " % len(host_list)
+        if len(host_list) == 0:
+            print "\nNo configuration settings were found.  Please check your variables file.\n"
+            exit(1)
+        elif len(host_list) == 1:
+            print "Found settings for 1 device.  It is: "
+        elif len(host_list) > 1:
+            print "Found settings for %d devices.  They are: " % len(host_list)
+        else:
+            print "ERROR!!"
+            exit(1)
+            
         x = 1
         for host in host_list:
             print "%d. %s" % (x, host)
@@ -427,8 +438,10 @@ hline()
 
 if args.create_vars and os.path.isfile(args.variables):    
     print "\nThe file %s already exists.\n\nIf you are trying to generate config files, please remove the '-c' argument.\nIf you are trying to create a variables file, please supply an unused filename\n" % args.variables
+
 elif args.create_vars and not os.path.isfile(args.variables):
     create_var_file()
+
 else:
     try:
         var_file = open(args.variables, 'r')
@@ -436,7 +449,7 @@ else:
         host_list, importdata = parse_vars_file(var_file)
         config_merge()        
     except IOError:
-        print "The template file %s cannot be found, please try again with a valid filename\n" % args.variables
+        print "The variables file %s cannot be found, please try again with a valid filename\n" % args.variables
         exit(1)
 
 
