@@ -23,40 +23,39 @@ def import_csv(csvfile):
         
     #Reset file position to beginnig (just in case)
     csvfile.seek(0)
-    with open('ExampleVars.csv', "rU") as csvfile:
-        varsfile = csv.reader(csvfile)
-        header = varsfile.next()
-        #Check Header Row for proper syntax
-        headreg=re.compile(r"<.*?>")
-        for item in header:
-            if headreg.match(item) == None:
-                print "Invalid Header Row.  Item: %s is not the proper format.\nEXITING...\n" % item
-                exit(0)
-        #Finish Check Sequence        
-        data_dict = {}
-        host_list = []
-        for row in varsfile:
-            row_num = 2 #First data row would be line 2 when opened in Excel""
-            #skip over header row, if somehow file position resets
-            if row == header:
-                pass
+    varsfile = csv.reader(csvfile)
+    header = varsfile.next()
+    #Check Header Row for proper syntax
+    headreg=re.compile(r"<.*?>")
+    for item in header:
+        if headreg.match(item) == None:
+            print "Invalid Header Row.  Item: %s is not the proper format.\nEXITING...\n" % item
+            exit(0)
+    #Finish Check Sequence        
+    data_dict = {}
+    host_list = []
+    for row in varsfile:
+        row_num = 2 #First data row would be line 2 when opened in Excel""
+        #skip over header row, if somehow file position resets
+        if row == header:
+            pass
 
-            #Make sure data row is the same length as header row  
-            if len(row) != len(header): 
-                if len(row) > len(header):
-                    over = len(row) - len(header)
-                    print "ERROR: Row %d has %d more fields than the header row.\nEXITING...\n" % (row_num, over)
-                    exit(0)
-                else:
-                    under = len(header) - len(row)
-                    print "ERROR: Row %d has %d fewer fields than the header row.\nEXITING...\n" % (row_num, under)
-                    exit(0)
+        #Make sure data row is the same length as header row  
+        if len(row) != len(header): 
+            if len(row) > len(header):
+                over = len(row) - len(header)
+                print "ERROR: Row %d has %d more fields than the header row.\nEXITING...\n" % (row_num, over)
+                exit(0)
+            else:
+                under = len(header) - len(row)
+                print "ERROR: Row %d has %d fewer fields than the header row.\nEXITING...\n" % (row_num, under)
+                exit(0)
             
-            host_list.append(row[0])
-            data_dict[row[0]] = {}
-            for key, value in zip(header, row):
-                data_dict[row[0]][key] = value
-            
+        host_list.append(row[0])
+        data_dict[row[0]] = {}
+        for key, value in zip(header, row):
+            data_dict[row[0]][key] = value
+        
     #Return the list of hosts and the data structure to the main program.
     return host_list, data_dict
     
@@ -344,7 +343,7 @@ elif args.create_vars and not os.path.isfile(args.variables):
 
 else:
     try:
-        var_file = open(args.variables, 'r')
+        var_file = open(args.variables, 'rU')
         #Parse variables file into global data structures.  These are referenced by many of the functions.
         host_list, importdata = import_csv(var_file)
         config_merge()        
