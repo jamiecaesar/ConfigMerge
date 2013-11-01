@@ -2,6 +2,7 @@
 import argparse
 import os
 import re
+import csv
 os.system('cls' if os.name=='nt' else 'clear')
 
 #=============FUNCTION DEFINITIONS===============#
@@ -10,7 +11,8 @@ def hline():
     print "-" * 60
     
     
-def parse_vars_file(file):
+    
+def import_csv(csvfile):
     """This function takes the file with all the variable and their values, listed for each host, and 
         puts it into a data structure that can later be used to write out each config script.  It also 
         tracks the names of hosts found in the file and returns those for quick review prior to exporting
@@ -20,77 +22,49 @@ def parse_vars_file(file):
         dictionary (sub-dictionary?) with each find/replace key and its associated value)"""
         
     #Reset file position to beginnig (just in case)
-    file.seek(0)
-    host_list = []
-    dict_vars = {}
-    errors = ""
-    #This variable tracks whether the line being parsed is part of a host "block" of variables or not.
-    hostblock = 0
-
-    for line in file:
-        #Ignore comment lines
-        if line.startswith("#"):
+    csvfile.seek(0)
+    with open('ExampleVars.csv', "rU") as csvfile:
+        varsfile = csv.reader(csvfile)
+        header = varsfile.next()
+        #Check Header Row for proper syntax
+        headreg=re.compile(r"<.*?>")
+        for item in header:
+            if headreg.match(item) == None:
+                print "Invalid Header Row.  Item: %s is not the proper format.\nEXITING...\n" % item
+                exit(0)
+        #Finish Check Sequence        
+        data_dict = {}
+        host_list = []
+        for row in varsfile:
+            row_num = 2 #First data row would be line 2 when opened in Excel""
+            #skip over header row, if somehow file position resets
+            if row == header:
                 pass
-                
-        #Use a marker so we know if we are inside of a particular host's block of variables.  When we see a
-        #HOSTNAME var, it is set to 1, at <--END--> it is set back to 0.
-        elif "<--END-->" in line:
-            hostblock = 0
 
-        #This string "::" is used to separate the key and value in the variable file.  If any line doesn't
-        #have this (with exception of the END line, shown above), ignore it and print an error.
-        elif "::" not in line:
-            print "Did NOT find seperator (::) in %r. Line ignored" % line
-
-        #If we find a HOSTNAME variable, but the function thinks we are still in a host's block of variables, 
-        #then throw an error and exit.
-        elif "<HOSTNAME>" in line and hostblock == 1:
-            hline()
-            print "ERROR: <HOSTNAME> found inside another host's variable block."
-            print "ERROR LINE: '%r'" % line
-            print "Exiting program. Please correct line and try again."
-            exit(0)
-            
-        #HOSTNAME variable after an <--END--> line (hostblock=0) triggers the start of a new host block, and
-        #creates an entry in the dictionary for the host.
-        elif "<HOSTNAME>" in line and hostblock == 0:
-            #Split the variable (<HOSTNAME>) from the value
-            label, hostname = line.split('::')
-            hostname = hostname.rstrip()
-            for imported_host in host_list:
-                if hostname == imported_host:
-                    print "ERROR: DUPLICATE HOSTNAME IN VARIABLES FILE. EXITING..."
+            #Make sure data row is the same length as header row  
+            if len(row) != len(header): 
+                if len(row) > len(header):
+                    over = len(row) - len(header)
+                    print "ERROR: Row %d has %d more fields than the header row.\nEXITING...\n" % (row_num, over)
                     exit(0)
-            hostblock = 1
-            #Create an entry in the dictionary for the host.  The value will be another dictionary.
-            host_list.append(hostname)
-            dict_vars[hostname] = {}
-            #The first value of the sub-dictionary will be the <HOSTNAME> variable and actual hostname for
-            #this device
-            dict_vars[hostname][label] = hostname
-        
-        #If the other statements don't match, and we are inside a host's block of variables, then assume
-        #this line is a variable and add it to the sub-dictionary for the particular host.    
-        elif hostblock == 1:
-            #This should match all find/replace lines under a particular hostname.  This code just adds
-            #the pairs to the sub-dictionary for the associated host.
-            key, value = line.split('::')
-            value = value.rstrip()
-            dict_vars[hostname][key] = value
-
-        else:
-            #If this section matches a line, something was wrong with the file.  It prints an output of
-            #the line and under which host this occurred to help track down the error (for example, it
-            #could be HOSTNAME line that had an error, so all lines for that host will match this)
-            print "INVALID LINE in %s: '%r'" % (hostname, line)
+                else:
+                    under = len(header) - len(row)
+                    print "ERROR: Row %d has %d fewer fields than the header row.\nEXITING...\n" % (row_num, under)
+                    exit(0)
+            
+            host_list.append(row[0])
+            data_dict[row[0]] = {}
+            for key, value in zip(header, row):
+                data_dict[row[0]][key] = value
             
     #Return the list of hosts and the data structure to the main program.
-    return host_list, dict_vars
+    return host_list, data_dict
+    
     
     
 def write_configs(vars, template):
     """This template writes each host's configuration file.  It should be passed both the template file
-        to use, as well as the data structure generated by the parse_vars_file() function."""
+        to use, as well as the data structure generated by the import_csv() function."""
         
     if args.verbose:
         hline()
@@ -137,6 +111,7 @@ def write_configs(vars, template):
         print "Configuration files exported.\n"
         dstfile.close()
         
+    
                 
 def print_vars_per_host(varlist):
     """This should be passed the data structure with all the hostname find/replace variables in it.
@@ -167,6 +142,7 @@ def print_vars_per_host(varlist):
         hline()
 
 
+
 def find_unique_vars(file):
     """This function searches the file for all unique find/replace variables, and returns a list
         of unique variables"""
@@ -176,22 +152,18 @@ def find_unique_vars(file):
 
     file.seek(0)
     #Compile a regex that searches for non-whitespace chars between a < and >
-    reg=re.compile(r"<\S*?>")
+    reg=re.compile(r"<.*?>")
     for line in file:
         #Use findall because some lines may have more than 1 variable on it. Output is a list.
         linematch = reg.findall(line)
         for item in linematch:
-            #ignore this special string that only marks the end of a hosts variable block    
-            if item == "<--END-->":
-                pass
-            else:
-                #If it is anything else, append it to the list of variables found
-                all_vars.append(item)
+            all_vars.append(item)
     else:
         #Sets can't have duplicate items, so by converting the list to a set and back, we will
         #be left with a list with only one copy of each unique variable.
         find_unique_vars = list(set(all_vars))
     return find_unique_vars
+
 
 
 def var_list_compare(filename1, filename2, vars_1, vars_2):
@@ -216,41 +188,9 @@ def var_list_compare(filename1, filename2, vars_1, vars_2):
         if len(set(vars_2) - set(vars_1)) != 0:
             print "Variables that only exist in %s are: %s\n" % (filename2, list(set(vars_2) - set(vars_1)))
         return False #because one list contained more (or different) vars than the other
+     
         
 
-def per_host_var_check(template_list, vardata):
-    """This function will check the variables found in the template against each host's imported list of
-         variables.  If a host is missing variables, the user will be alerted about which host has missing
-         variables."""
-        
-    error = 0
-    if args.verbose:
-        print "Running per-host variable checks..."
-        hline()
-    for host in vardata:
-        host_vars = []
-        for key in vardata[host]:
-            host_vars.append(key)
-        diff_set = set(template_list) - set(host_vars)
-        if len(diff_set) != 0:
-            error = 1
-            print "Host %s is missing the following vars found in the template:\n%s" % (host, ", ".join(diff_set))
-            hline()
-        elif len(diff_set) == 0 and args.verbose:
-            print "Host %s has all the required variables in its block" % host
-            hline()
-        else:
-            pass                
-    if error == 1:
-        print
-        print "The host(s) mentioned above are missing variables that are found in the template file.  Please add these variables and try again.\n"
-        print "If the host does not require the missing variable, add an entry for the variable but leave the value blank i.e. '<MISSINGVAR>:: '\n"
-        print "This will tell the script to remove any lines in that host's configuration file that contains <MISSINGVAR>.\n"
-        exit(0)
-    else:
-        if args.verbose:
-            print "Variable check completed successfully\n"
-        
 def q_review_vars():
     """This is a decision tree on whether the user wants to review the variables before
         allowing the program to export all the config files.  It will loop indefinitely until
@@ -274,6 +214,7 @@ def q_review_vars():
             print "I did not understand that response"
     
     
+    
 def q_start_export():
     """This is a decision tree on whether the user wants to export the configuration files."""
     while True:
@@ -289,16 +230,6 @@ def q_start_export():
             print "I did not understand that answer"
 
 
-def write_host_block(file, hostname, t_vars):
-    if args.verbose:
-        print "Writing line for <HOSTNAME>"
-    file.write("<HOSTNAME>::" + hostname + "\n")
-    for var in sorted(t_vars):
-        if args.verbose:
-            print "Writing Line For " + var
-        file.write(var + "::\n")
-    file.write("<--END-->\n")
-
 
 def create_var_file():
     t_vars = find_unique_vars(template)
@@ -311,45 +242,16 @@ def create_var_file():
     if "<HOSTNAME>" in t_vars:
         t_vars.remove("<HOSTNAME>")
     else:
-        print "The template MUST contain a '<HOSTNAME>' variable.  Please add one after the 'hostname' or 'switchname' command in the template and try again"
+        print "The template MUST contain a '<HOSTNAME>' variable (case sensitive).  Please add one after the 'hostname' or 'switchname' command in the template and try again.\n"
         exit(0)
+    s_t_vars = sorted(t_vars)
+    s_t_vars.insert(0,"<HOSTNAME>")
 
-    #Ask how many hosts they user wants, so we can generate a block for each
-    while True:
-        numhosts = eval(raw_input("How many device blocks do you want added to the output file? "))
-        if type(numhosts) == int:
-            break
-        else:
-            print "Value must be a whole number.  Please try again."
-    
-    newfile = open(args.variables, 'w')
+    with open(args.variables, 'wb') as newfile:
+        outputcsv = csv.writer(newfile)
+        outputcsv.writerow(s_t_vars)
 
-    #Write File Header
-    if args.verbose:
-        print "Writing File Header"
-    newfile.write("###############################################################################\n")
-    newfile.write("#     Lines starting with # will be ignored\n")
-    newfile.write("#\n")
-    newfile.write("#     All Find/Replace items for the same device should be grouped together.\n")
-    newfile.write("#     The variable should be contained in angle brackets  ->  < >\n")
-    newfile.write("#     These variable names will be replaced if found in the template config file\n")
-    newfile.write("#	  Variable names MUST NOT have spaces in them\n")
-    newfile.write("#     The variable should be separated by its value with a double colon. -> ::\n")
-    newfile.write("#     The grouping MUST start with the <HOSTNAME> variable\n")
-    newfile.write("#     The grouping ends with the <--END--> tag.\n")
-    newfile.write("#     Add information for as many hosts as you'd like.\n")
-    newfile.write("###############################################################################\n")
 
-    #Print a variable block for each host the user requested.
-    count = 1
-    while count <= numhosts:
-        write_host_block(newfile, "Host" + str(count) + "-Router", t_vars)
-        count = count + 1
-
-    newfile.close()
-
-    print str(count - 1) + " variable blocks written to file: " + args.variables
-    
 
 def config_merge():
     #Gather unique variables from each file, so they can be compared.
@@ -374,9 +276,6 @@ def config_merge():
 
     #Close variables file -- no longer needed
     var_file.close()
-
-    #Now make sure each host has all variables found in the template configuration
-    per_host_var_check(template_u, importdata)
 
     if args.quiet:
         #If quiet flag was set, skip the review and get straight to the config writing
@@ -436,6 +335,7 @@ except IOError:
 print "Start of ConfigMerge output:"
 hline()
 
+#Check to make sure we don't overwrite existing variables file
 if args.create_vars and os.path.isfile(args.variables):    
     print "\nThe file %s already exists.\n\nIf you are trying to generate config files, please remove the '-c' argument.\nIf you are trying to create a variables file, please supply an unused filename\n" % args.variables
 
@@ -446,7 +346,7 @@ else:
     try:
         var_file = open(args.variables, 'r')
         #Parse variables file into global data structures.  These are referenced by many of the functions.
-        host_list, importdata = parse_vars_file(var_file)
+        host_list, importdata = import_csv(var_file)
         config_merge()        
     except IOError:
         print "The variables file %s cannot be found, please try again with a valid filename\n" % args.variables
