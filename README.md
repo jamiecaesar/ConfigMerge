@@ -1,7 +1,7 @@
 ConfigMerge
 ===========
 
-ConfigMerge is a Python script (v3.x) for creating multiple IOS/NX-OS configurations based on a template.  It requires the following:
+ConfigMerge is a Python script for creating multiple IOS/NX-OS configurations based on a template.  It requires the following:
 
 * a template configuration file
 * a variables file, which contains replacement values for every host that a config should be generated for.  
