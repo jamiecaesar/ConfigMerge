@@ -1,4 +1,4 @@
-#!/usr/bin/python
+#!/opt/local/bin/python
 import argparse
 import os
 import re
