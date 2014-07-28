@@ -1,354 +1,292 @@
 #!/usr/bin/python
-import argparse
-import os
-import re
-import csv
-os.system('cls' if os.name=='nt' else 'clear')
+import argparse, os, re, csv
 
-#=============FUNCTION DEFINITIONS===============#
-def hline():
-    """This function simply prints a line of 60 "-" chars, to add divisions to screen output"""
-    print "-" * 60
-    
-    
-    
-def import_csv(csvfile):
-    """This function takes the file with all the variable and their values, listed for each host, and 
-        puts it into a data structure that can later be used to write out each config script.  It also 
-        tracks the names of hosts found in the file and returns those for quick review prior to exporting
-        the configurations.
-        
-        The data structure is a dictionary with each hostname as the key, and the value being another 
-        dictionary (sub-dictionary?) with each find/replace key and its associated value)"""
-        
-    #Reset file position to beginnig (just in case)
-    csvfile.seek(0)
-    varsfile = csv.reader(csvfile)
-    header = varsfile.next()
-    #Check Header Row for proper syntax
-    headreg=re.compile(r"<.*?>")
-    for item in header:
-        if headreg.match(item) == None:
-            print "Invalid Header Row.  Item: %s is not the proper format.\nEXITING...\n" % item
-            exit(0)
-    #Finish Check Sequence        
+def Yes(question):
+    answered = False
+    count = 0
+    while not answered:
+        answ = raw_input(question + " ")
+        if answ.lower() == "yes" or answ.lower() == "y":
+            return True
+        elif answ.lower() == "no" or answ.lower() == "n":
+            return False
+        else:
+            print "I did not understand that response."
+            if count > 4:
+                print "Too many missed attempts.  Exiting..."
+                exit(1)
+            count += 1
+
+def find_unique_vars(template):
+    '''
+    This function searches the supplied template file for all unique find/replace 
+    variables, and returns all unique variables in a list.
+    '''
+    all_vars = []
+
+    # Compile a regex that searches for non-whitespace chars between a < and >
+    reg=re.compile(r"<.*?>")
+
+    # Verify and open the template file
+    try:
+        with open(template, 'r') as tempFile:
+            tempFile.seek(0)
+            for line in tempFile:
+                #Use findall because some lines may have more than 1 variable on it.
+                linematch = reg.findall(line)
+                for item in linematch:
+                    all_vars.append(item)
+    except IOError:
+        print ("The template file {} cannot be found.\nPlease try again "
+        "with a valid filename\n".format(args.template))
+        exit(5)
+    # Sets can't have duplicate items, so by converting the list to a set and back, we will
+    # be left with a list with only one copy of each unique variable.
+    return list(set(all_vars))
+
+
+def create_var_file(dVars, csvFile):
+    '''
+    This fuction writes the variables CSV file to disk.  It takes a list of variables and
+    the name of the CSV file that should be written.
+    '''
+    # We want the HOSTNAME variable to be the first one in the list. 
+    # If there isn't a hostname field in the template, throw an error.  Otherwise remove it 
+    # from the list of vars, because it will be statically entered into the file.    
+    if "<HOSTNAME>" in dVars:
+        dVars.remove("<HOSTNAME>")
+    else:
+        print ("The template MUST contain a '<HOSTNAME>' variable (case sensitive).\n"
+            "Please add one after the 'hostname' or 'switchname' command in the template "
+            "and try again.\n")
+        exit(0)
+    sorted_vars = sorted(dVars)
+    sorted_vars.insert(0, "<HOSTNAME>")
+
+    # Write the CSV file using the information from sorted_vars
+    try:
+        with open(csvFile, 'wb') as newfile:
+            outputcsv = csv.writer(newfile)
+            outputcsv.writerow(sorted_vars)
+            print "File {} was successfully created.".format(csvFile)
+    except IOError:
+        print "The CSV filename is invalid.  Please try again with a valid filename."
+        exit(5)
+
+
+def import_csv(csvFile):
+    '''
+    This function opens the variables CSV file and loads the data into a data structure 
+    that can later be used to write out each config script.  The data structure is a 
+    dictionary with each hostname as the key, and the value being another dictionary. 
+    The host-specific dictionary uses each variable name as a key and the replacement
+    string as the value
+    '''
     data_dict = {}
     host_list = []
-    for row in varsfile:
-        row_num = 2 #First data row would be line 2 when opened in Excel""
-        #skip over header row, if somehow file position resets
-        if row == header:
-            pass
 
-        #Make sure data row is the same length as header row  
-        if len(row) != len(header): 
-            if len(row) > len(header):
-                over = len(row) - len(header)
-                print "ERROR: Row %d has %d more fields than the header row.\nEXITING...\n" % (row_num, over)
-                exit(0)
-            else:
-                under = len(header) - len(row)
-                print "ERROR: Row %d has %d fewer fields than the header row.\nEXITING...\n" % (row_num, under)
-                exit(0)
-            
-        host_list.append(row[0])
-        data_dict[row[0]] = {}
-        for key, value in zip(header, row):
-            data_dict[row[0]][key] = value
+    try:
+        with open(csvFile, 'rU') as varFile:
+            #Reset file position to beginnig (just in case)
+            varFile.seek(0)
+            csvreader = csv.reader(varFile)
+            header = csvreader.next()
+            #Check Header Row for proper syntax
+            headreg = re.compile(r"^<.*?>$")
+            for item in header:
+                if headreg.match(item) == None:
+                    print("Invalid Header Row.  Item: '{}' is not the proper format.\n"
+                                "EXITING...\n".format(item))
+                    exit(1)
+            # Start building host_list and data_dict
+            for row in csvreader:
+                #skip over header row, if somehow file position resets
+                if row == header:
+                    pass
         
+                #Make sure data row is the same length as header row  
+                if len(row) != len(header): 
+                    print("ERROR: The following row does not match the header row.\n"
+                            "Row Data:\n{}\n"
+                            "EXITING...\n".format(row))
+                    exit(1)
+                    
+                host_list.append(row[0])
+                data_dict[row[0]] = {}
+                for key, value in zip(header, row):
+                    data_dict[row[0]][key] = value
+    except IOError:
+        print ("The file {} cannot be found, please try again with a valid "
+                "filename\n".format(csvFile))
+        exit(1)
+
     #Return the list of hosts and the data structure to the main program.
     return host_list, data_dict
-    
-    
-    
-def write_configs(vars, template):
-    """This template writes each host's configuration file.  It should be passed both the template file
-        to use, as well as the data structure generated by the import_csv() function."""
-        
-    if args.verbose:
-        hline()
-    for host in vars:
+
+def same_list(tVars, cVars):
+    '''
+    This function will compare two lists to make sure they are the same.  It does this
+    by converting the lists to sets and finding the symmetric difference, which gives
+    the values that are only in one set or the other, but not both.  If this value is
+    not 0, then the lists do not have the same elements.
+    '''
+    if len(set(tVars) ^ set(cVars)) == 0:
+        return True
+    else:
+        return False
+     
+
+def write_configs(templateFile, lHosts, dData, verbosity):
+    '''
+    This fuction writes each host's configuration file.  It should be passed both the 
+    template file to use, as well as the data structure generated by the import_csv() 
+    function.
+    '''
+    try:
+        template = open(templateFile, 'r')
+    except IOError:
+        print ("The template file {} cannot be found.\nPlease try again "
+        "with a valid filename\n".format(args.template))
+        exit(5)
+    config_count = 0    
+    for host in lHosts:
+        config_count += 1
         #reset the template read position to start for each host
         template.seek(0)
         #create file name based on hostname of the device
         filename = host + ".txt"
-        hostinfo = vars[host]
         #Check that the "configs" directory exists.  If not, create it.
         if not os.path.exists("configs"):
             os.makedirs("configs")
         dstfile = open("./configs/" + filename, 'w')
-        if args.verbose:
-            print "Starting write of file %s." % filename
-            hline()
+        if verbosity >= 2:
+                print "-" * 60
+        if verbosity >= 1:
+            print "Starting write of file {}.".format(filename)
+        line_num = 1
         for line in template:
-            # For each line of the template, do a search for each find/replace "key".  If it is found
-            # replace it with the actual value.  Each line is process for every find/replace key in case
-            # the line has more than one.  i.e.  ip address <INSIDE_IP> <INSIDE_MASK>
+            # For each line of the template, do a search for each find/replace "key".  
+            # If it is found replace it with the actual value.  Each line is process for 
+            # every find/replace key in case the line has more than one.  
+            # i.e.  ip address <INSIDE_IP> <INSIDE_MASK>
             ok_to_write = True
-            for key, value in hostinfo.iteritems():
+            for key, value in dData[host].iteritems():
                 if key in line:
                     if value == "":
-                        #Do not write the line if there is no value for the variable that matched the line
+                        # Do not write the line if there is no value for the variable 
+                        # that matched the line
                         ok_to_write = False
-                        if args.verbose:
-                            print "Found empty value for variable %s. Line '%s' removed." % (key, line)
+                        if verbosity >= 2:
+                            print( "Found empty value for variable {} on line {}. Line '{}' "
+                                "removed.".format(key, line_num, line))
                     else:
                         line = line.replace(key,value)
-                        if args.verbose:
-                            print "Found an instance of %s and replaced it with '%s'" % (key, value)
+                        if verbosity >= 2:
+                            print( "Found an instance of {} on line {} and replaced it with '{}'"
+                                    .format(key, line_num, value))
             else:
-                #After the line has been checked/modified for all applicable keys (for loop completed), 
-                #and the value for the variable wasn't empty, write the line to the output file.
+                # After the line has been checked/modified for all applicable keys 
+                # (for loop completed), and the value for the variable wasn't empty, 
+                # write the line to the output file.
                 if ok_to_write:
                     dstfile.write(line)
-        if args.verbose:
-            print "Configuration %s has been completed" % filename
-            hline()
-    else:
-        #Once the entire loop has finished, all lines in the template have been modified and written.  
-        #Close the file.
-        print "Configuration files exported.\n"
+                    line_num += 1
+        # Close file before the next iteration opens it back up 
         dstfile.close()
-        
-    
-                
-def print_vars_per_host(varlist):
-    """This should be passed the data structure with all the hostname find/replace variables in it.
-        This function will crawl the data structure to list all find/replace variables and values
-        grouped by the host they are meant for."""
-        
-    hline()
-    #Loop through the primary dictionary (one entry per host)
-    for host in host_list:  #References global host_list
-        print "Variables for device %s:" % host
-        hline()
-        #Loop through the secondary dictionary, in alpha order, and list key/value pairs
-        keylist = sorted(varlist[host])
-        for key in keylist:
-            print "KEY: %s , VALUE: %s" % (key, varlist[host][key])
-        else:
-            hline()
-            #Pause after each host's output.  Allow a method to quit should the user see some 
-            #incorrect data
-            pause = raw_input("Press ENTER to Continue (q to QUIT)")
-            if pause.lower() == "q":
-                print "\nExiting due to user request\n"
-                exit(0)
-            hline()
+        if verbosity >= 2:
+            print "Configuration %s has been completed" % filename
     else:
-        hline()
-        print "DONE"
-        hline()
-
-
-
-def find_unique_vars(file):
-    """This function searches the file for all unique find/replace variables, and returns a list
-        of unique variables"""
-        
-    #A list to collect every variable delimited by < >.  All instances (duplicates) will be added.
-    all_vars = []
-
-    file.seek(0)
-    #Compile a regex that searches for non-whitespace chars between a < and >
-    reg=re.compile(r"<.*?>")
-    for line in file:
-        #Use findall because some lines may have more than 1 variable on it. Output is a list.
-        linematch = reg.findall(line)
-        for item in linematch:
-            all_vars.append(item)
-    else:
-        #Sets can't have duplicate items, so by converting the list to a set and back, we will
-        #be left with a list with only one copy of each unique variable.
-        find_unique_vars = list(set(all_vars))
-    return find_unique_vars
-
-
-
-def var_list_compare(filename1, filename2, vars_1, vars_2):
-    """This function will take the list of unique variables found in two files and report if they match.
-        If they do not match, then this function will output the difference.  This function will print
-        the results and returns a boolean expression on whether the two var lists are identical"""
-    if args.verbose:
-        print "Comparing lists of variables from %s and %s" % (filename1, filename2)   
-    #Using the "&" operation between 2 sets gives the common items.  If the common item set isn't the 
-    #same length as both the var_1 and var_2 sets, then they aren't exactly the same.
-    common_set = set(vars_1) & set(vars_2)
-    if len(common_set) == len(set(vars_1)) and len(common_set) == len(set(vars_2)):
-        if args.verbose:
-            print "All variables match between %s and %s\n" % (filename1, filename2)
-        return True #because both lists were identical
-    else:
-        print "WARNING:"
-        #Figure out which vars are left when you subtract one set from the other.  Whatever is left only exists
-        #in that one file.  Those variables will not be replaced in the output script.
-        if len(set(vars_1) - set(vars_2)) != 0:
-            print "Variables that only exist in %s are: %s\n" % (filename1, list(set(vars_1) - set(vars_2)))
-        if len(set(vars_2) - set(vars_1)) != 0:
-            print "Variables that only exist in %s are: %s\n" % (filename2, list(set(vars_2) - set(vars_1)))
-        return False #because one list contained more (or different) vars than the other
-     
+        # Once the entire loop has finished, all lines in the template have been 
+        # modified and written, close the file.
+        if verbosity >= 1:
+            print "-" * 60
+        print "Successfully exported {} configuration files.\n".format(config_count)
         
 
-def q_review_vars():
-    """This is a decision tree on whether the user wants to review the variables before
-        allowing the program to export all the config files.  It will loop indefinitely until
-        a valid respose is received."""
+
+def main(args):
+    '''
+    The main function for the ConfigMerge program.  This function receives the 
+    arguments from argparse and launches the rest of the functions.
+    '''
+    templateVars = find_unique_vars(args.template)
+    # If outputCSV is supplied, we need to create a variables file.
+    if (args.outputCSV is not None):
+        if args.verbosity >= 1:
+            print "The following variables were found in the template file:"
+            for item in templateVars:
+                print item
+            if not Yes("Do you want to continue? (y/n)"):
+                print "Exiting due to user selection."
+                exit(1)
+        # If filename exists already
+        if os.path.isfile(args.outputCSV) and not Yes("The file {} already exists.  "
+          "Overwrite? (y/n)".format(args.outputCSV)):
+            print "Exiting.  Please re-run with correct filename."
+            exit(5)
+        # If we didn't exit because the filename existings and we didn't want to overwrite, then
+        # create the file.
+        create_var_file(templateVars, args.outputCSV)
+    
+    # If inputCSV is supplied, we need to parse it and create configuration files.
+    elif (args.inputCSV is not None):
+        if args.verbosity >= 1:
+            print "Comparing lists of variables from %s and %s" % (args.template, args.inputCSV)
         
-    if args.verbose:
-        #If verbose flag was selected, automatically review instead of asking, then move onto config write.
-        print_vars_per_host(importdata)
-        q_start_export()
-        exit(0)
-    while True:
-        answ2 = raw_input("Would you like to review the imported vars before generating configs? ")
-        if answ2.lower() == "yes" or answ2.lower() == "y":
-            print_vars_per_host(importdata)
-            q_start_export()
-            break
-        elif answ2.lower() == "no" or answ2.lower() == "n":
-            q_start_export()
-            break
-        else:
-            print "I did not understand that response"
-    
-    
-    
-def q_start_export():
-    """This is a decision tree on whether the user wants to export the configuration files."""
-    while True:
-        answ3 = raw_input("\nWARNING: Exporting configurations will overwrite any files with the same name in the 'configs' directory.\nWould you like to export the config files now? ")
-        if answ3.lower() == "yes" or answ3.lower() == "y":
-            write_configs(importdata, template)
-            template.close()
-            break
-        elif answ3.lower() == "no" or answ3.lower() == "n":
-            print "Configuration files have NOT been exported.  Exiting...\n"
-            exit(0)
-        else:
-            print "I did not understand that answer"
-
-
-
-def create_var_file():
-    t_vars = find_unique_vars(template)
-    
-    if args.verbose:
-        print "Found the following variables: " + str(t_vars)[1:(len(str(t_vars))-2)]
-
-    #If there isn't a hostname field in the template, throw an error.  Otherwise remove it from the list
-    #of vars, because it will be statically entered later, per device.    
-    if "<HOSTNAME>" in t_vars:
-        t_vars.remove("<HOSTNAME>")
-    else:
-        print "The template MUST contain a '<HOSTNAME>' variable (case sensitive).  Please add one after the 'hostname' or 'switchname' command in the template and try again.\n"
-        exit(0)
-    s_t_vars = sorted(t_vars)
-    s_t_vars.insert(0,"<HOSTNAME>")
-
-    with open(args.variables, 'wb') as newfile:
-        outputcsv = csv.writer(newfile)
-        outputcsv.writerow(s_t_vars)
-
-
-
-def config_merge():
-    #Gather unique variables from each file, so they can be compared.
-    var_file_u = find_unique_vars(var_file)
-    template_u = find_unique_vars(template)
-    identical = var_list_compare(args.variables, args.template, var_file_u, template_u)
-
-    #If there were errors in the comparison, allow the user to decide if they want to continue or not.
-    if not identical:
-        while True:
-            answ = raw_input("Would you like to continue with the merge anyway? ")
-            if answ.lower() == "yes" or answ.lower() == "y":
-                break
-            elif answ.lower() == "no" or answ.lower() == "n":
-                print "Please modify your input files and try again.  Thanks!"
-                var_file.close()
-                template.close()
-                exit(0)
-            else:
-                print "I did not understand that response."
-    
-
-    #Close variables file -- no longer needed
-    var_file.close()
-
-    if args.quiet:
-        #If quiet flag was set, skip the review and get straight to the config writing
-        write_configs(importdata, template)
-    else:
-        #Otherwise, give brief review of the hosts found
-        if len(host_list) == 0:
-            print "\nNo configuration settings were found.  Please check your variables file.\n"
+        # Check for the save variables in both the template and the CSV file.
+        # The ^ operator gives all elements that are only in one set, not both.
+        csvVars = find_unique_vars(args.inputCSV)
+        if not same_list(templateVars, csvVars):
+            if len(set(templateVars) - set(csvVars)) != 0:
+                print("{} only exists in {}\n"
+                    .format(list(set(templateVars) - set(csvVars)), args.template))
+            if len(set(csvVars) - set(templateVars)) != 0:
+                print("{} only exists in {}\n"
+                    .format(list(set(csvVars) - set(templateVars)), args.csvVars))
+            print "Exiting.  Please correct input files and try again."
             exit(1)
-        elif len(host_list) == 1:
-            print "Found settings for 1 device.  It is: "
-        elif len(host_list) > 1:
-            print "Found settings for %d devices.  They are: " % len(host_list)
         else:
-            print "ERROR!!"
-            exit(1)
-            
-        x = 1
-        for host in host_list:
-            print "%d. %s" % (x, host)
-            x = x + 1
-        print ""
-        #First Decision tree.  Allows user to decide if brief review looks accurate.
-        #Other decision tree functions are called depending on the response.
-        while True:
-            answ = raw_input("Is this correct? (Type 'yes' to continue) ")
-            if answ.lower() == "yes" or answ.lower() == "y":
-                q_review_vars()
-                break
-            elif answ.lower() == "no" or answ.lower() == "n":
-                print "Please modify your vars file and try again.  Thanks!"
-                template.close()
-                exit(0)
-            else:
-                print "I did not understand that response."
-    
-    
-#=================BEGIN MAIN PROGRAM=====================#
-
-#This section manages the (-h) help output, with the help of ArgParse, and makes sure that all required arguments are passed to the script when run.
-parser = argparse.ArgumentParser(description="This script will generate a configuration file for multiple devices.  It needs a 'template' configuration file that uses variable names in every location where each device needs a different value.  This script also needs a 'variables' file that lists the variables and associated replacement value for the device.  This variables file can contain sections for multiple configuration files.")
-parser.add_argument("-c", "--create_vars", action="store_true", help="Create a variables file containing all vars found in the template.  The data will be written to the file specified in the 'variables' argument")
-group = parser.add_mutually_exclusive_group()
-group.add_argument("-v", "--verbose", action="store_true", help="Will provide a more verbose output and automatically trigger a review of all parsed variables")
-group.add_argument("-q", "--quiet", action="store_true", help="Will provide minimal output and will automatically skip all review questions")
-parser.add_argument("template", help="Name of the file that is the configuration template")
-parser.add_argument("variables", help="Name of the file that contains find/replace variables for each device")
-#Assign input arguments to the "args" variable for reference later in the script.
-args = parser.parse_args()
-
-try:
-    template = open(args.template, 'r')
-except IOError:
-    print "The template file %s cannot be found, please try again with a valid filename\n" % args.variables
-    exit(1)
-
-print "Start of ConfigMerge output:"
-hline()
-
-#Check to make sure we don't overwrite existing variables file
-if args.create_vars and os.path.isfile(args.variables):    
-    print "\nThe file %s already exists.\n\nIf you are trying to generate config files, please remove the '-c' argument.\nIf you are trying to create a variables file, please supply an unused filename\n" % args.variables
-
-elif args.create_vars and not os.path.isfile(args.variables):
-    create_var_file()
-
-else:
-    try:
-        var_file = open(args.variables, 'rU')
-        #Parse variables file into global data structures.  These are referenced by many of the functions.
-        host_list, importdata = import_csv(var_file)
-        config_merge()        
-    except IOError:
-        print "The variables file %s cannot be found, please try again with a valid filename\n" % args.variables
+            if args.verbosity >= 1:
+                print "Variable lists from both files match."
+            if args.verbosity == 1:
+                print "-" * 60
+        #Write configuration files
+        lHosts, dData = import_csv(args.inputCSV)
+        write_configs(args.template, lHosts, dData, args.verbosity)
+    # Other cases (either both supplied or neither supplied) should never happen if Argparse
+    # is set up correctly.  Throw an error and close if this happens.
+    else:
+        print "ERROR! Argparse shouldn't allow input and output CSV to be both blank or specified."
         exit(1)
 
+
+# This portion only gets called if the script is run directly from the interpreter. 
+# If this file is imported into another program, this part will not run.
+if __name__ == '__main__':
+    #Clear the screen
+    os.system('cls' if os.name=='nt' else 'clear')
+
+    # Define arguments that can be passed to the program.
+    parser = argparse.ArgumentParser(description="This script will generate "
+        "configuration files for multiple devices.  It needs a template "
+        "configuration file that contains variable to be replaced by this "
+        "script.  This script also needs a CSV file that contains the variables "
+        "and the replacement value for each device that a configuration is being "
+        "created for.")   
+    parser.add_argument("-v", "--verbosity", action="count", default = 0, 
+        help="Will provide a more verbose output.  -v is verbose, -vv is very verbose.")   
+    parser.add_argument("template", help="Name of the file that contains the configuration "
+        "template.")
+    group = parser.add_mutually_exclusive_group(required=True)
+    group.add_argument("-i", "--inputCSV", help="Name of the CSV file that contains replacement "
+        "values for each device.")
+    group.add_argument("-o", "--outputCSV", help="Name of the CSV file that this script will "
+        "generate.  This file will only contain a header row based on all the variables found "
+        "in the supplied template file.")
+
+    #Assign input arguments to the "args" variable for reference later in the script.
+    args = parser.parse_args()
+
+    #Call the main function with parsed arguments
+    main(args)
 
