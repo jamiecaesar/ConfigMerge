@@ -252,6 +252,9 @@ def main(args):
                 print "-" * 60
         #Write configuration files
         lHosts, dData = import_csv(args.inputCSV)
+        if len(lHosts) != len(list(set(lHosts))):
+            print "Duplicate hostnames found in CSV File.  Exiting..."
+            exit(1)
         write_configs(args.template, lHosts, dData, args.verbosity)
     # Other cases (either both supplied or neither supplied) should never happen if Argparse
     # is set up correctly.  Throw an error and close if this happens.
