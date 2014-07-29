@@ -17,6 +17,7 @@ def Yes(question):
                 exit(1)
             count += 1
 
+
 def find_unique_vars(template):
     '''
     This function searches the supplied template file for all unique find/replace 
@@ -123,6 +124,7 @@ def import_csv(csvFile):
     #Return the list of hosts and the data structure to the main program.
     return host_list, data_dict
 
+
 def same_list(tVars, cVars):
     '''
     This function will compare two lists to make sure they are the same.  It does this
@@ -134,7 +136,7 @@ def same_list(tVars, cVars):
         return True
     else:
         return False
-     
+
 
 def write_configs(templateFile, lHosts, dData, verbosity):
     '''
@@ -201,7 +203,6 @@ def write_configs(templateFile, lHosts, dData, verbosity):
         if verbosity >= 1:
             print "-" * 60
         print "Successfully exported {} configuration files.\n".format(config_count)
-        
 
 
 def main(args):
@@ -292,4 +293,3 @@ if __name__ == '__main__':
 
     #Call the main function with parsed arguments
     main(args)
-
